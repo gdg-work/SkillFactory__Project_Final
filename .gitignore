@@ -1,0 +1,8 @@
+DB/,db_password.txt
+DB/,dgolub_passwd
+DB/final.dump
+Python/.ipynb_checkpoints/
+Python/.sconsign.dblite
+Python/LocalPostgres.py
+Python/final_project.ipynb
+,*

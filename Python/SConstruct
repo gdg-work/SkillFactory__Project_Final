@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+
+import os
+import fnmatch
+
+# builders
+Py_2_NB = Builder(
+    action = Action(["jupytext --to ipynb --from py:percent  $SOURCE"]),
+    src_suffix = ".py",
+    suffix = ".ipynb")
+
+# environment
+env = Environment(ENV = {'PATH' : os.environ['PATH'] },
+                  platform = 'posix',
+                  SrcDir   = ".",
+                  Out_Dir  = ".",
+                  BUILDERS = { "Python":Py_2_NB },
+                  )
+
+env.Depends('final_project.ipynb', 'final_project.py')
+
+Notebooks = ['final_project.ipynb']
+
+env.Default(Notebooks)
+
+env.Python(source='final_project.py')
