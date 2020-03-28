@@ -13,6 +13,9 @@ sklearn = "*"
 statsmodels = "*"
 scons = "*"
 psycopg2 = "*"
+matplotlib = "*"
+seaborn = "*"
+ggplot = "*"
 
 [requires]
 python_version = "3.8"
