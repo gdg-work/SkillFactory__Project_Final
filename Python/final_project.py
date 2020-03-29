@@ -144,6 +144,17 @@ def large_query(cursor: "DB Cursor", ctes: "list of CTEs", sql: "SQL query",
     return chain.from_iterable(chunks_until_empty)
 
 # %% [markdown]
+# В стандартном Python нет функции `display()`, эмулирую её через `print()`
+# %%
+try:
+    __ = get_ipython()
+    INTERACTIVE=1
+except NameError:
+    INTERACTIVE=0
+    def display(*args, **kwargs):
+        print(*args, **kwargs)
+
+# %% [markdown]
 # Инициализация графической подсистемы
 #
 # %%
@@ -164,7 +175,8 @@ plt.ioff()
 # записей с одним `user_id`
 
 # %%
-USER_COURSE_PAIRS = """user_course_pairs as (
+USER_COURSE_PAIRS = """\
+user_course_pairs as (
     select user_id, resource_id as course_id
     from
         final.carts as c
@@ -175,14 +187,14 @@ USER_COURSE_PAIRS = """user_course_pairs as (
         and
         c.state = 'successful'
     order by user_id
-    )
-"""
+)"""
 
 # %% [markdown]
 # Сколько клиентов покупали курсы?
 
 # %%
-BUYERS_COUNT="""buyers_count as (
+BUYERS_COUNT="""\
+buyers_count as (
     select count(distinct user_id) from user_course_pairs
 )"""
 
@@ -191,7 +203,8 @@ BUYERS_COUNT="""buyers_count as (
 # Ответ "без понятия, но могу посмотреть количество разных купленных курсов за 2 года"
 
 # %%
-COURSES_IN_CARTS = """courses_count as (
+COURSES_IN_CARTS = """\
+courses_count as (
     select count(distinct resource_id)
     from final.cart_items
         where resource_type = 'Course'
@@ -202,7 +215,8 @@ COURSES_IN_CARTS = """courses_count as (
 # какой-то один курс был положен в корзину, но никем не куплен)
 
 # %%
-COURSES_BOUGHT = """courses_bought as (
+COURSES_BOUGHT = """\
+courses_bought as (
     select distinct course_id
     from user_course_pairs
 )"""
@@ -221,6 +235,22 @@ courses_count_by_user as (
 )"""
 
 # %% [markdown]
+# Теперь нужно для каждого пользователя создать список курсов, которые он купил, но при условии, что таких курсов
+# больше одного.  Разделяю список пробелами, так как это числа (т.е. внутри них пробелов быть не может),
+# и по умолчанию `str.split()` разбивает строки по пробельным символам (white space).
+
+# %%
+COURSES_LIST_QUERY="""\
+select
+    distinct user_id,
+    count(distinct course_id) as courses_cnt,
+    STRING_AGG(distinct course_id::text, ' ') as courses_list
+from user_course_pairs
+group by user_id
+having count(distinct course_id) > 1;
+"""
+
+# %% [markdown]
 # Запускаю некоторые запросы, чтобы убедиться, что у меня CTE составлены правильно и выдаются ожидаемые
 # результаты, которые я уже получил из базы вручную, в процессе отладки CTE.
 #
@@ -237,26 +267,12 @@ assert(psql_query(cursor, [COURSES_IN_CARTS], 'select * from courses_count')[0][
 assert(bought_courses_cnt == 126)
 assert(len(bought_courseids_lst) == 126)
 
+# %% 
 # now we have N touples in list bought_courseids_lst, and we need a numpy array there.
 # So, peel off the tuple with list comprehension and make an array from resulting list
 course_ids_a = np.array([id for (id,) in bought_courseids_lst])
-print(course_ids_a)
+if INTERACTIVE: print(course_ids_a) 
 
-# %% [markdown]
-# Теперь нужно для каждого пользователя создать список курсов, которые он купил, но при условии, что таких курсов
-# больше одного.  Разделяю список пробелами, так как это числа (т.е. внутри них пробелов быть не может),
-# и по умолчанию `str.split()` разбивает строки по пробельным символам (white space).
-
-# %%
-COURSES_LIST_QUERY="""\
-select
-    distinct user_id,
-    count(distinct course_id) as courses_cnt,
-    STRING_AGG(distinct course_id::text, ' ') as courses_list
-from user_course_pairs
-group by user_id
-having count(distinct course_id) > 1;
-"""
 #
 # Теперь обрабатываем полученный список пользователей.
 # Думаю, что для каждого пользователя надо создать set frozenset-ов, где на 2-м уровне будут все пары курсов из тех,
@@ -288,29 +304,35 @@ for (users_count, (user_id, courses_cnt, user_courses_str)) in enumerate(large_q
     for pair in users_data_d[user_id]:
         pairs_count[pair] += 1
 else:
-    print(f"Total users: {users_count}")
+    if INTERACTIVE: print(f"Total users: {users_count}")
 
-## XXX Сюда просятся графики "20 самых частых" и "20 самых редких"
-## XXX
 assert(len(ids_count) == 126)
-TOP_COUNT=5
-print(f"Верхние {TOP_COUNT} самых покупаемых курсов и их пар")
-print(ids_count.most_common(TOP_COUNT))
-print(pairs_count.most_common(TOP_COUNT))
-print(f"Нижние {TOP_COUNT} самых непопулярных курсов и пар")
-print(ids_count.most_common()[-TOP_COUNT:-1])
-print(pairs_count.most_common()[-TOP_COUNT:-1])
+
+def print_tops(ids_count, pairs_count):
+    """Печатает верхние и нижние N курсов и пар. Параметры: 1) счётчик курсов, 2) счётчик пар."""
+    TOP_COUNT=5
+    print(f"Верхние {TOP_COUNT} самых покупаемых курсов и их пар")
+    print(ids_count.most_common(TOP_COUNT))
+    print(pairs_count.most_common(TOP_COUNT))
+    print(f"Нижние {TOP_COUNT} самых непопулярных курсов и пар")
+    print(ids_count.most_common()[-TOP_COUNT:-1])
+    print(pairs_count.most_common()[-TOP_COUNT:-1])
+    return
+
+if INTERACTIVE:
+    print_tops(ids_count, pairs_count)
 
 # %% [markdown]
 # Построю график количества заказов на курсы, начиная с самых популярных. Масштаб по оси Y логарифмический.
 
 # %%
-pop_courses = pd.Series({id: cnt for id, cnt in ids_count.most_common()}) 
-fig = plt.figure(figsize=(12,7)) 
-ax = pop_courses.plot(kind='bar') 
-plt.yscale('log')
-plt.xticks([])
-plt.show()
+if INTERACTIVE:
+    pop_courses = pd.Series({id: cnt for id, cnt in ids_count.most_common()}) 
+    fig = plt.figure(figsize=(12,7)) 
+    ax = pop_courses.plot(kind='bar') 
+    plt.yscale('log')
+    plt.xticks([])
+    plt.show()
 
 # %% [markdown]
 # Логарифмический масштаб помог выявить на графике три группы курсов:
@@ -354,7 +376,21 @@ freq_table = pd.Series({k:v for k,v in ids_count.most_common()})
 unpopular_threshold = math.ceil(freq_table.quantile(0.1))
 
 # %% [markdown]
-# 
+# Функция для построения двумерной матрицы из таблицы частоты встречаемости пар курсов
+
+# %%
+def make_freq_matrix(pairs_count_dict: "Dictionary with pair as a key and count as a value") -> pd.DataFrame:
+    """
+    Построение двумерной матрицы сочетаний курсов. Параметры:
+        1) Словарь, где каждому  ID курса соответствует Counter вида {(пара_курсов): число_встреченных}
+    """
+    pairs_df = pd.DataFrame(index=freq_table.index, columns=freq_table.index, dtype=np.uint32, data=0)
+    for course_pair in pairs_count_dict.keys():
+        (course_1, course_2) = course_pair
+        pairs_df.loc[course_1, course_2] = pairs_count_dict[course_pair]
+        pairs_df.loc[course_2, course_1] = pairs_count_dict[course_pair]
+    return pairs_df
+
 # %% [markdown]
 # Имеем: таблицу pairs_count, где каждой паре поставлена в соответсвие её частота встречаемости.
 # Строю: таблицу, где ID курсов по вертикали и горизонтали (их не так много). Делаю по обеим осям
@@ -362,11 +398,7 @@ unpopular_threshold = math.ceil(freq_table.quantile(0.1))
 # будут образовывать и наиболее часто встрачающиеся пары.
 
 # %%
-course_pairs_df = pd.DataFrame(index=freq_table.index, columns=freq_table.index, dtype=np.uint32, data=0)
-for course_pair in pairs_count.keys():
-    (course_1, course_2) = course_pair
-    course_pairs_df.loc[course_1, course_2] = pairs_count[course_pair]
-    course_pairs_df.loc[course_2, course_1] = pairs_count[course_pair]
+course_pairs_df = make_freq_matrix(pairs_count)
 
 # %% [markdown]
 # Таблица 126×126 слишком велика для удобного отображения на экране, но если преобразовать её в тепловую
@@ -374,12 +406,13 @@ for course_pair in pairs_count.keys():
 # от "частого" угла (левого верхнего) в "редкий" (правый нижний).
 
 # %%
-plt.figure(figsize=(12,12))
-plt.title('Популярность пар курсов. По осям популярность уменьшается слева направо и сверху вниз')
-g = sns.heatmap(course_pairs_df, annot=False, linewidths=0.0, cmap=sns.color_palette('OrRd', 100))
-g.set_xticks([])
-g.set_yticks([])
-plt.show()
+if INTERACTIVE:
+    plt.figure(figsize=(12,12))
+    plt.title('Популярность пар курсов. По осям популярность уменьшается слева направо и сверху вниз')
+    g = sns.heatmap(course_pairs_df, annot=False, linewidths=0.0, cmap=sns.color_palette('OrRd', 100))
+    g.set_xticks([])
+    g.set_yticks([])
+    plt.show()
 
 # %% [markdown]
 # Популярность пар курсов оказалась крайне неравномерной, и подтверждается предположение о том, что самые
@@ -388,9 +421,11 @@ plt.show()
 # Посмотрим в цифрах «частый» (левый верхний) угол и «редкий» (правый нижний) углы матрицы
 
 # %%
-TOP_ANGLE_COUNT=20
-display(course_pairs_df.iloc[0:TOP_ANGLE_COUNT,0:TOP_ANGLE_COUNT])
-display(course_pairs_df.iloc[-1 * TOP_ANGLE_COUNT:-1,-1 * TOP_ANGLE_COUNT:-1])
+if INTERACTIVE:
+    TOP_ANGLE_COUNT=20
+    display(course_pairs_df.iloc[0:TOP_ANGLE_COUNT,0:TOP_ANGLE_COUNT])
+    MINUS_TOP = (-1) * TOP_ANGLE_COUNT - 1
+    display(course_pairs_df.iloc[MINUS_TOP:-1,MINUS_TOP:-1])
 
 # %% [markdown]
 # Как и следовало ожидать, самые частые сочетания из часто покупаемых курсов, редко покупаемые
@@ -412,28 +447,39 @@ display(course_pairs_df.iloc[-1 * TOP_ANGLE_COUNT:-1,-1 * TOP_ANGLE_COUNT:-1])
 # оправдана, на мой взгляд, система тегов помогла бы выдавать более осмысленные
 # рекомендации.
 
-# %% 
-res = pd.DataFrame(index=course_pairs_df.index, dtype=np.uint32)
-for (row_idx, courses_paired) in course_pairs_df.iterrows(): 
-    max_two = courses_paired.sort_values(ascending=False)[0:2]
-    # И тут вспоминаю, что есть ограничение "курс слишком непопулярный".  У нас max_two.iloc[0] >= max_two.iloc[1]
-    if max_two.iloc[1] > unpopular_threshold:
-        res.loc[row_idx, 'first_rec']  = max_two.index[0]
-        res.loc[row_idx, 'second_rec'] = max_two.index[1]
-        res.loc[row_idx, 'rec1_cnt']   = max_two.iloc[0]
-        res.loc[row_idx, 'rec2_cnt']   = max_two.iloc[1]
-    elif max_two.iloc[0] > unpopular_threshold:
-        res.loc[row_idx, 'first_rec']  = max_two.index[0]
-        res.loc[row_idx, 'rec1_cnt']   = max_two.iloc[0]
-        res.loc[row_idx, 'second_rec'] = freq_table.index[0]
-        res.loc[row_idx, 'rec2_cnt']   = freq_table.iloc[0]
-    else:
-        res.loc[row_idx, 'first_rec']  = freq_table.index[0]
-        res.loc[row_idx, 'second_rec'] = freq_table.index[1]
-        res.loc[row_idx, 'rec1_cnt']   = freq_table.iloc[0]
-        res.loc[row_idx, 'rec2_cnt']   = freq_table.iloc[1]
-res = res.drop(['rec1_cnt', 'rec2_cnt'], axis=1).astype(np.uint32)
-display(res)
+# %%
+def get_recommended_courses(pairs_df, threshold, freq_courses) -> pd.DataFrame:
+    """ Функция строит массив рекомендаций по данным, порог и таблице частоты пар курсов.
+    Параметры:
+        1) DataFrame пар курсов, где идентификаторы по вертикали и горизонтали, количество пар на пересечениях.
+        2) пороговое значение для признания курса малопопулярным.
+        3) Series, в которой собраны курсы по порядку убывания популярности.
+    Возвращает:
+        pd.DataFrame с ID курса в индексе, рекомендациями в колонках 'first_rec' и 'second_rec'.
+    """
+    res = pd.DataFrame(index=pairs_df.index, dtype=np.uint32)
+    for (row_idx, courses_paired) in pairs_df.iterrows(): 
+        max_two = courses_paired.sort_values(ascending=False)[0:2]
+        # И тут вспоминаю, что есть ограничение "курс слишком непопулярный".  У нас max_two.iloc[0] >= max_two.iloc[1]
+        if max_two.iloc[1] > threshold:
+            res.loc[row_idx, 'first_rec']  = max_two.index[0]
+            res.loc[row_idx, 'second_rec'] = max_two.index[1]
+            res.loc[row_idx, 'rec1_cnt']   = max_two.iloc[0]
+            res.loc[row_idx, 'rec2_cnt']   = max_two.iloc[1]
+        elif max_two.iloc[0] > threshold:
+            res.loc[row_idx, 'first_rec']  = max_two.index[0]
+            res.loc[row_idx, 'rec1_cnt']   = max_two.iloc[0]
+            res.loc[row_idx, 'second_rec'] = freq_courses.index[0]
+            res.loc[row_idx, 'rec2_cnt']   = freq_courses.iloc[0]
+        else:
+            res.loc[row_idx, 'first_rec']  = freq_courses.index[0]
+            res.loc[row_idx, 'second_rec'] = freq_courses.index[1]
+            res.loc[row_idx, 'rec1_cnt']   = freq_courses.iloc[0]
+            res.loc[row_idx, 'rec2_cnt']   = freq_courses.iloc[1]
+    res = res.drop(['rec1_cnt', 'rec2_cnt'], axis=1).astype(np.uint32)
+    return res
+
+res = get_recommended_courses(course_pairs_df, unpopular_threshold, freq_table)
 
 # %% [markdown]
 # В дата-фрейме 'res' содержатся рекомендуемые курсы. Структура датафрейма: индекс - курс,
@@ -443,8 +489,13 @@ display(res)
 # `res.loc[289, 'second_rec']`.
 
 # %%
-display(res.loc[489], res.loc[489, 'first_rec'], res.loc[489, 'second_rec'])
+if INTERACTIVE:
+    display(res.loc[489], res.loc[489, 'first_rec'], res.loc[489, 'second_rec'])
 
 # %% [markdown]
-# Легко вывести эту таблицу в CSV или Excel.  Например, для вывода в CSV:
+# Легко вывести эту таблицу в CSV или Excel.  Более универсален вывод в CSV, при вызове этого файла
+# как программы -- выдаётся именно этот формат на стандартный вывод.
 
+if __name__ == "__main__" and not INTERACTIVE:
+    # called as a standalone program, so print recommendations list and exit
+    print(get_recommended_courses(course_pairs_df, unpopular_threshold, freq_table).to_csv())
