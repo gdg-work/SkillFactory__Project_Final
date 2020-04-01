@@ -18,9 +18,11 @@ env = Environment(ENV = {'PATH' : os.environ['PATH'] },
                   )
 
 env.Depends('final_project.ipynb', 'final_project.py')
+env.Depends('final_proj_abtest.ipynb', 'final_proj_abtest.py')
 
-Notebooks = ['final_project.ipynb']
+Notebooks = ['final_project.ipynb', 'final_proj_abtest.ipynb']
 
 env.Default(Notebooks)
 
 env.Python(source='final_project.py')
+env.Python(source='final_proj_abtest.py')

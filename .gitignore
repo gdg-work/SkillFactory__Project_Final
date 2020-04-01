@@ -6,3 +6,5 @@ Python/.sconsign.dblite
 Python/LocalPostgres.py
 Python/final_project.ipynb
 ,*
+Python/final_proj_abtest.ipynb
+Python/__pycache__
