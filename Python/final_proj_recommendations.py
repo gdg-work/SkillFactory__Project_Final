@@ -27,7 +27,7 @@
 # %% [markdown]
 # ## Основные результаты <a name='results'/>
 # %% [markdown]
-# Разработал программу, которая по идентификатору (ID) курса предлагает ещё два
+# Разработана программа, которая по идентификатору (ID) курса предлагает ещё два
 # ID курсов для допродажи.  Программа выбирает эти  курсы на основании частотной
 # таблицы пар курсов.
 #
@@ -76,6 +76,10 @@
 #
 # 2. Было бы полезно внедрить систему оценок курсов студентами, тогда появится возможность выбирать пары
 # не только из совместно проданных курсов, но и из наиболее высоко оцененных.
+#
+# 3. Модифицировать программу так, чтобы она не рекомендовала пользователю те курсы,
+# которые он уже купил. Но в таком случае программа должна работать в режиме API, потому что потребуются
+# дополнительные запросы в базу.
 #
 # Дальнейшие разделы описывают данные и ход работы.
 
@@ -141,7 +145,9 @@ from itertools import combinations
 from itertools import chain
 from functools import partial
 from collections import Counter
-from LocalPostgres import DB_CONNECT_STRING
+# -- on my local machine, I keep passwords in separate files
+# from LocalPostgres import DB_CONNECT_STRING
+from SkillFactory_DB import DB_CONNECT_STRING
 from matplotlib.axes._axes import _log as matplotlib_axes_logger
 from IPython.display import HTML
 
